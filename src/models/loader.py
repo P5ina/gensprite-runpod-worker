@@ -91,8 +91,8 @@ def get_sprite_pipeline():
             cache_dir=MODEL_CACHE,
             token=HF_TOKEN,
         )
-        # Use CPU offload to fit in VRAM - don't call .to() before this
-        _sprite_pipeline.enable_sequential_cpu_offload()
+        # Use model CPU offload - moves components to GPU only when needed
+        _sprite_pipeline.enable_model_cpu_offload()
     return _sprite_pipeline
 
 
@@ -107,8 +107,8 @@ def get_texture_pipeline():
             variant="fp16",
             cache_dir=MODEL_CACHE,
         )
-        # Use CPU offload - don't call .to() before this
-        _texture_pipeline.enable_sequential_cpu_offload()
+        # Use model CPU offload - moves components to GPU only when needed
+        _texture_pipeline.enable_model_cpu_offload()
     return _texture_pipeline
 
 
