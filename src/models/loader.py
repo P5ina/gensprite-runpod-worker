@@ -6,8 +6,8 @@ Downloads and caches models during Docker build.
 import os
 import torch
 
-# Cache directory for models
-MODEL_CACHE = os.environ.get("HF_HOME", "/app/models")
+# Cache directory for models - use network volume if available
+MODEL_CACHE = os.environ.get("HF_HOME", "/runpod-volume/models")
 
 # HuggingFace token for gated models (Flux Schnell)
 HF_TOKEN = os.environ.get("HF_TOKEN")

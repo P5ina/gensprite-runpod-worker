@@ -16,15 +16,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
-ENV HF_HOME=/app/models
+ENV HF_HOME=/runpod-volume/models
 
 # Copy source code
 COPY src/ src/
 
-# Pre-download ALL models during build (including Flux)
-# Uses BuildKit secret to avoid exposing HF_TOKEN in image layers
-RUN --mount=type=secret,id=HF_TOKEN \
-    HF_TOKEN=$(cat /run/secrets/HF_TOKEN) \
-    python -c "from src.models.loader import preload_models; preload_models()"
+# Models will be downloaded at runtime and cached on network volume
+# Set HF_TOKEN and HF_HOME=/runpod-volume/models in RunPod env vars
 
 CMD ["python", "-u", "src/handler.py"]
