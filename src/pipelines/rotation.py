@@ -1,8 +1,10 @@
 """
-Rotation pipeline using SVD (Stable Video Diffusion) for multi-view generation.
-Generates orbital video frames and extracts 8 directions.
+Rotation pipeline using SV3D (Stable Video 3D) for multi-view generation.
+Generates 21 orbital frames and extracts 8 directions.
 """
 
+import os
+import math
 from typing import Optional, Callable, Awaitable
 from PIL import Image
 import numpy as np
@@ -13,23 +15,23 @@ from models.loader import get_rembg_session, BAKED_MODEL_CACHE
 from utils.blob import upload_image, download_image
 
 
-# SVD generates 25 frames by default
-# Map to 8 cardinal/ordinal directions
+# SV3D generates 21 frames
+# Extract 8 frames at these indices (matching ComfyUI workflow)
 DIRECTION_INDICES = {
     "S": 0,      # Front (0°)
-    "SW": 3,     # ~43°
-    "W": 6,      # ~86°
-    "NW": 9,     # ~130°
-    "N": 12,     # ~173° (back)
-    "NE": 15,    # ~216°
-    "E": 18,     # ~259°
-    "SE": 21,    # ~302°
+    "SW": 3,     # ~51°
+    "W": 5,      # ~86°
+    "NW": 8,     # ~137°
+    "N": 10,     # ~171° (back)
+    "NE": 13,    # ~223°
+    "E": 15,     # ~257°
+    "SE": 18,    # ~309°
 }
 
 
-def preprocess_input_image(image: Image.Image, size: int = 576) -> Image.Image:
+def preprocess_image(image: Image.Image, size: int = 576) -> Image.Image:
     """
-    Preprocess input image for SVD.
+    Preprocess input image for SV3D.
     - Remove background if needed
     - Center the object
     - Resize to target size
@@ -95,24 +97,59 @@ def preprocess_input_image(image: Image.Image, size: int = 576) -> Image.Image:
 
 
 # Lazy-loaded pipeline
-_svd_pipeline = None
+_sv3d_pipeline = None
 
 
-def get_svd_pipeline():
-    """Get or create the SVD pipeline for rotation."""
-    global _svd_pipeline
-    if _svd_pipeline is None:
-        from diffusers import StableVideoDiffusionPipeline
+def get_sv3d_pipeline():
+    """Get or create the SV3D pipeline for rotation."""
+    global _sv3d_pipeline
+    if _sv3d_pipeline is not None:
+        return _sv3d_pipeline
 
-        # SVD is baked into the image (ungated model)
-        _svd_pipeline = StableVideoDiffusionPipeline.from_pretrained(
-            "stabilityai/stable-video-diffusion-img2vid-xt",
-            torch_dtype=torch.float16,
-            variant="fp16",
-            cache_dir=BAKED_MODEL_CACHE,
-        ).to("cuda")
+    from diffusers import AutoencoderKLTemporalDecoder, EulerDiscreteScheduler
+    from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
 
-    return _svd_pipeline
+    # Import the custom SV3D components
+    import sys
+    sys.path.insert(0, "/app/src")
+    from sv3d.pipeline import StableVideo3DDiffusionPipeline
+    from sv3d.unet import SV3DUNetSpatioTemporalConditionModel
+
+    model_path = os.path.join(BAKED_MODEL_CACHE, "models--chenguolin--sv3d-diffusers/snapshots")
+    # Find the actual snapshot folder
+    if os.path.exists(model_path):
+        snapshots = os.listdir(model_path)
+        if snapshots:
+            model_path = os.path.join(model_path, snapshots[0])
+    else:
+        model_path = "chenguolin/sv3d-diffusers"
+
+    # Load components
+    unet = SV3DUNetSpatioTemporalConditionModel.from_pretrained(
+        model_path, subfolder="unet", torch_dtype=torch.float16
+    )
+    vae = AutoencoderKLTemporalDecoder.from_pretrained(
+        model_path, subfolder="vae", torch_dtype=torch.float16
+    )
+    scheduler = EulerDiscreteScheduler.from_pretrained(
+        model_path, subfolder="scheduler"
+    )
+    image_encoder = CLIPVisionModelWithProjection.from_pretrained(
+        model_path, subfolder="image_encoder", torch_dtype=torch.float16
+    )
+    feature_extractor = CLIPImageProcessor.from_pretrained(
+        model_path, subfolder="feature_extractor"
+    )
+
+    _sv3d_pipeline = StableVideo3DDiffusionPipeline(
+        unet=unet,
+        vae=vae,
+        scheduler=scheduler,
+        image_encoder=image_encoder,
+        feature_extractor=feature_extractor,
+    ).to("cuda")
+
+    return _sv3d_pipeline
 
 
 async def generate_rotation(
@@ -123,7 +160,7 @@ async def generate_rotation(
     on_progress: Optional[Callable[[int, str], Awaitable[None]]] = None,
 ) -> dict:
     """
-    Generate 8-directional rotation from a single input image using SVD.
+    Generate 8-directional rotation from a single input image using SV3D.
     """
     if on_progress:
         await on_progress(5, "Downloading input image...")
@@ -135,27 +172,36 @@ async def generate_rotation(
         await on_progress(10, "Preprocessing image...")
 
     # Preprocess (576x576, white background, centered)
-    processed_input = preprocess_input_image(input_image, size=576)
+    processed_input = preprocess_image(input_image, size=576)
 
     if on_progress:
-        await on_progress(15, "Loading model...")
+        await on_progress(15, "Loading SV3D model...")
 
-    pipe = get_svd_pipeline()
+    pipe = get_sv3d_pipeline()
 
     if on_progress:
         await on_progress(20, "Generating orbital views...")
 
-    # Generate video frames
+    # Calculate camera angles for SV3D
+    num_frames = 21
+    # Polar angle (elevation) - convert to radians
+    polar_rad = [math.radians(90 - elevation)] * num_frames
+    # Azimuth angles - full 360 rotation
+    azimuths_rad = [math.radians(i * 360 / num_frames) for i in range(num_frames)]
+
+    # Generate frames
     generator = torch.Generator(device="cuda").manual_seed(42)
 
     output = pipe(
         processed_input,
-        num_frames=25,
-        num_inference_steps=25,
+        height=576,
+        width=576,
+        num_frames=num_frames,
+        polars_rad=polar_rad,
+        azimuths_rad=azimuths_rad,
         decode_chunk_size=8,
         generator=generator,
-        motion_bucket_id=127,  # Controls motion amount
-        noise_aug_strength=0.02,
+        num_inference_steps=20,
     )
 
     frames = output.frames[0]  # List of PIL images
@@ -168,7 +214,7 @@ async def generate_rotation(
 
     # Extract and upload 8 directions
     results = {}
-    direction_names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+    direction_names = ["S", "SW", "W", "NW", "N", "NE", "E", "SE"]
 
     for i, direction in enumerate(direction_names):
         if on_progress:

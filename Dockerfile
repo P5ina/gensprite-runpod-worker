@@ -35,12 +35,10 @@ RUN python -c "from diffusers import StableDiffusionXLPipeline; \
         cache_dir='/app/models' \
     )"
 
-# SVD for rotation generation (~10GB)
-RUN python -c "from diffusers import StableVideoDiffusionPipeline; \
-    StableVideoDiffusionPipeline.from_pretrained( \
-        'stabilityai/stable-video-diffusion-img2vid-xt', \
-        torch_dtype='auto', \
-        variant='fp16', \
+# SV3D for rotation generation (~10GB)
+RUN python -c "from huggingface_hub import snapshot_download; \
+    snapshot_download( \
+        'chenguolin/sv3d-diffusers', \
         cache_dir='/app/models' \
     )"
 
