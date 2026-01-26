@@ -6,8 +6,14 @@ Downloads and caches models during Docker build.
 import os
 import torch
 
-# Cache directory for models - use network volume if available
-MODEL_CACHE = os.environ.get("HF_HOME", "/runpod-volume/models")
+# Baked-in models (SDXL, SVD, rembg) are in /app/models
+BAKED_MODEL_CACHE = "/app/models"
+
+# Gated models (Flux) download to network volume at runtime
+RUNTIME_MODEL_CACHE = os.environ.get("HF_RUNTIME_CACHE", "/runpod-volume/models")
+
+# Legacy - keep for compatibility
+MODEL_CACHE = BAKED_MODEL_CACHE
 
 # U2NET_HOME is set via Dockerfile to /app/models/u2net (baked into image)
 
@@ -87,10 +93,11 @@ def get_sprite_pipeline():
     global _sprite_pipeline
     if _sprite_pipeline is None:
         from diffusers import FluxPipeline
+        # Flux is gated, downloads to network volume at runtime
         _sprite_pipeline = FluxPipeline.from_pretrained(
             "black-forest-labs/FLUX.1-schnell",
             torch_dtype=torch.float16,
-            cache_dir=MODEL_CACHE,
+            cache_dir=RUNTIME_MODEL_CACHE,
             token=HF_TOKEN,
             device_map=None,
             low_cpu_mem_usage=False,
@@ -103,11 +110,12 @@ def get_texture_pipeline():
     global _texture_pipeline
     if _texture_pipeline is None:
         from diffusers import StableDiffusionXLPipeline
+        # SDXL is baked into the image
         _texture_pipeline = StableDiffusionXLPipeline.from_pretrained(
             "stabilityai/stable-diffusion-xl-base-1.0",
             torch_dtype=torch.float16,
             variant="fp16",
-            cache_dir=MODEL_CACHE,
+            cache_dir=BAKED_MODEL_CACHE,
             device_map=None,
             low_cpu_mem_usage=False,
         ).to("cuda")

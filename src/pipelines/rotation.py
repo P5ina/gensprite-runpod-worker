@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from rembg import remove
 
-from models.loader import get_rembg_session, MODEL_CACHE, HF_TOKEN
+from models.loader import get_rembg_session, BAKED_MODEL_CACHE
 from utils.blob import upload_image, download_image
 
 
@@ -104,12 +104,12 @@ def get_svd_pipeline():
     if _svd_pipeline is None:
         from diffusers import StableVideoDiffusionPipeline
 
+        # SVD is baked into the image (ungated model)
         _svd_pipeline = StableVideoDiffusionPipeline.from_pretrained(
             "stabilityai/stable-video-diffusion-img2vid-xt",
             torch_dtype=torch.float16,
             variant="fp16",
-            cache_dir=MODEL_CACHE,
-            token=HF_TOKEN,
+            cache_dir=BAKED_MODEL_CACHE,
         ).to("cuda")
 
     return _svd_pipeline

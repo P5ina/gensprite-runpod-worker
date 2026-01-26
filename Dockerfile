@@ -17,18 +17,37 @@ RUN pip install --no-cache-dir --upgrade-strategy only-if-needed -r requirements
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
-ENV HF_HOME=/runpod-volume/models
+ENV HF_HOME=/app/models
 ENV U2NET_HOME=/app/models/u2net
 
-# Download rembg model during build (baked into image)
+# Download rembg model during build
 RUN mkdir -p /app/models/u2net && \
     curl -L -o /app/models/u2net/isnet-general-use.onnx \
     https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx
 
+# Download ungated diffusers models during build
+# SDXL for texture generation (~6.5GB)
+RUN python -c "from diffusers import StableDiffusionXLPipeline; \
+    StableDiffusionXLPipeline.from_pretrained( \
+        'stabilityai/stable-diffusion-xl-base-1.0', \
+        torch_dtype='auto', \
+        variant='fp16', \
+        cache_dir='/app/models' \
+    )"
+
+# SVD for rotation generation (~10GB)
+RUN python -c "from diffusers import StableVideoDiffusionPipeline; \
+    StableVideoDiffusionPipeline.from_pretrained( \
+        'stabilityai/stable-video-diffusion-img2vid-xt', \
+        torch_dtype='auto', \
+        variant='fp16', \
+        cache_dir='/app/models' \
+    )"
+
 # Copy source code
 COPY src/ src/
 
-# Diffusers models downloaded at runtime and cached on network volume
-# Set HF_TOKEN and HF_HOME=/runpod-volume/models in RunPod env vars
+# Gated models (Flux Schnell) downloaded at runtime with HF_TOKEN
+# Set HF_TOKEN in RunPod env vars
 
 CMD ["python", "-u", "src/handler.py"]
