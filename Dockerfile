@@ -18,12 +18,17 @@ RUN pip install --no-cache-dir --upgrade-strategy only-if-needed -r requirements
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 ENV HF_HOME=/runpod-volume/models
-ENV U2NET_HOME=/runpod-volume/models/u2net
+ENV U2NET_HOME=/app/models/u2net
+
+# Download rembg model during build (baked into image)
+RUN mkdir -p /app/models/u2net && \
+    curl -L -o /app/models/u2net/isnet-general-use.onnx \
+    https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx
 
 # Copy source code
 COPY src/ src/
 
-# Models will be downloaded at runtime and cached on network volume
+# Diffusers models downloaded at runtime and cached on network volume
 # Set HF_TOKEN and HF_HOME=/runpod-volume/models in RunPod env vars
 
 CMD ["python", "-u", "src/handler.py"]

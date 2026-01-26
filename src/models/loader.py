@@ -9,9 +9,7 @@ import torch
 # Cache directory for models - use network volume if available
 MODEL_CACHE = os.environ.get("HF_HOME", "/runpod-volume/models")
 
-# Set U2NET_HOME for rembg models to use network volume
-U2NET_HOME = os.path.join(MODEL_CACHE, "u2net")
-os.environ["U2NET_HOME"] = U2NET_HOME
+# U2NET_HOME is set via Dockerfile to /app/models/u2net (baked into image)
 
 # HuggingFace token for gated models (Flux Schnell)
 HF_TOKEN = os.environ.get("HF_TOKEN")
