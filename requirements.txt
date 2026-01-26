@@ -1,13 +1,11 @@
 # RunPod
 runpod>=1.6.0
 
-# Diffusers and ML
-torch>=2.1.0
+# Diffusers and ML (torch is pre-installed in base image)
 diffusers>=0.25.0
 transformers>=4.36.0
 accelerate>=0.25.0
 safetensors>=0.4.0
-xformers>=0.0.23
 
 # Image processing
 Pillow>=10.0.0
