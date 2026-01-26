@@ -9,6 +9,9 @@ import torch
 # Cache directory for models
 MODEL_CACHE = os.environ.get("HF_HOME", "/app/models")
 
+# HuggingFace token for gated models (Flux Schnell)
+HF_TOKEN = os.environ.get("HF_TOKEN")
+
 
 def get_device():
     """Get the best available device."""
@@ -31,13 +34,14 @@ def preload_models():
     """
     print("Preloading models...")
 
-    # Flux Schnell for sprite generation
+    # Flux Schnell for sprite generation (gated model, requires HF_TOKEN)
     print("Loading Flux Schnell...")
     from diffusers import FluxPipeline
     FluxPipeline.from_pretrained(
         "black-forest-labs/FLUX.1-schnell",
         torch_dtype=torch.float16,
         cache_dir=MODEL_CACHE,
+        token=HF_TOKEN,
     )
 
     # SDXL for texture generation
@@ -73,6 +77,7 @@ def get_sprite_pipeline():
             "black-forest-labs/FLUX.1-schnell",
             torch_dtype=get_dtype(),
             cache_dir=MODEL_CACHE,
+            token=HF_TOKEN,
         )
         _sprite_pipeline.to(get_device())
         # Enable memory optimizations

@@ -13,15 +13,25 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Set environment variables early for model downloads
+# Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 ENV HF_HOME=/app/models
 
-# Copy source code first, then preload models
+# Copy source code
 COPY src/ src/
 
+# HuggingFace token for gated models (Flux Schnell)
+# Pass as build arg: docker build --build-arg HF_TOKEN=hf_xxx ...
+ARG HF_TOKEN
+ENV HF_TOKEN=${HF_TOKEN}
+
 # Pre-download models during build for faster cold starts
-RUN python -c "from src.models.loader import preload_models; preload_models()"
+# Requires HF_TOKEN for gated models
+RUN if [ -n "$HF_TOKEN" ]; then \
+        python -c "from src.models.loader import preload_models; preload_models()"; \
+    else \
+        echo "HF_TOKEN not provided, skipping model preload (will download at runtime)"; \
+    fi
 
 CMD ["python", "-u", "src/handler.py"]
