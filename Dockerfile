@@ -1,4 +1,4 @@
-FROM runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04
+FROM runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
 
 WORKDIR /app
 
@@ -21,11 +21,10 @@ ENV HF_HOME=/app/models
 # Copy source code
 COPY src/ src/
 
-# HuggingFace token for gated models (required for Flux)
-ARG HF_TOKEN
-ENV HF_TOKEN=${HF_TOKEN}
-
 # Pre-download ALL models during build (including Flux)
-RUN python -c "from src.models.loader import preload_models; preload_models()"
+# Uses BuildKit secret to avoid exposing HF_TOKEN in image layers
+RUN --mount=type=secret,id=HF_TOKEN \
+    HF_TOKEN=$(cat /run/secrets/HF_TOKEN) \
+    python -c "from src.models.loader import preload_models; preload_models()"
 
 CMD ["python", "-u", "src/handler.py"]
