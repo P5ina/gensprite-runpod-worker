@@ -87,14 +87,12 @@ def get_sprite_pipeline():
         from diffusers import FluxPipeline
         _sprite_pipeline = FluxPipeline.from_pretrained(
             "black-forest-labs/FLUX.1-schnell",
-            torch_dtype=get_dtype(),
+            torch_dtype=torch.float16,
             cache_dir=MODEL_CACHE,
             token=HF_TOKEN,
         )
-        _sprite_pipeline.to(get_device())
-        # Enable memory optimizations
-        if torch.cuda.is_available():
-            _sprite_pipeline.enable_model_cpu_offload()
+        # Use CPU offload to fit in VRAM - don't call .to() before this
+        _sprite_pipeline.enable_sequential_cpu_offload()
     return _sprite_pipeline
 
 
@@ -105,14 +103,12 @@ def get_texture_pipeline():
         from diffusers import StableDiffusionXLPipeline
         _texture_pipeline = StableDiffusionXLPipeline.from_pretrained(
             "stabilityai/stable-diffusion-xl-base-1.0",
-            torch_dtype=get_dtype(),
+            torch_dtype=torch.float16,
             variant="fp16",
             cache_dir=MODEL_CACHE,
         )
-        _texture_pipeline.to(get_device())
-        # Enable memory optimizations
-        if torch.cuda.is_available():
-            _texture_pipeline.enable_model_cpu_offload()
+        # Use CPU offload - don't call .to() before this
+        _texture_pipeline.enable_sequential_cpu_offload()
     return _texture_pipeline
 
 
