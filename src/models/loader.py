@@ -90,6 +90,8 @@ def get_sprite_pipeline():
             torch_dtype=torch.float16,
             cache_dir=MODEL_CACHE,
             token=HF_TOKEN,
+            device_map=None,
+            low_cpu_mem_usage=False,
         ).to("cuda")
     return _sprite_pipeline
 
@@ -104,6 +106,8 @@ def get_texture_pipeline():
             torch_dtype=torch.float16,
             variant="fp16",
             cache_dir=MODEL_CACHE,
+            device_map=None,
+            low_cpu_mem_usage=False,
         ).to("cuda")
     return _texture_pipeline
 
