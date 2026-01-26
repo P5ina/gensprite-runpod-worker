@@ -27,24 +27,14 @@ def get_dtype():
     return torch.float32
 
 
-def preload_models():
+def preload_public_models():
     """
-    Preload all models during Docker build.
-    This downloads models to the cache directory.
+    Preload non-gated models during Docker build.
+    Gated models (Flux) will be downloaded at runtime with HF_TOKEN.
     """
-    print("Preloading models...")
+    print("Preloading public models...")
 
-    # Flux Schnell for sprite generation (gated model, requires HF_TOKEN)
-    print("Loading Flux Schnell...")
-    from diffusers import FluxPipeline
-    FluxPipeline.from_pretrained(
-        "black-forest-labs/FLUX.1-schnell",
-        torch_dtype=torch.float16,
-        cache_dir=MODEL_CACHE,
-        token=HF_TOKEN,
-    )
-
-    # SDXL for texture generation
+    # SDXL for texture generation (public model)
     print("Loading SDXL...")
     from diffusers import StableDiffusionXLPipeline
     StableDiffusionXLPipeline.from_pretrained(
@@ -59,7 +49,29 @@ def preload_models():
     from rembg import new_session
     new_session("u2net")
 
-    print("All models preloaded!")
+    print("Public models preloaded!")
+    print("Note: Flux Schnell (gated) will download at runtime with HF_TOKEN")
+
+
+def preload_models():
+    """
+    Preload all models including gated ones.
+    Requires HF_TOKEN environment variable.
+    """
+    print("Preloading all models...")
+
+    # Flux Schnell for sprite generation (gated model, requires HF_TOKEN)
+    print("Loading Flux Schnell...")
+    from diffusers import FluxPipeline
+    FluxPipeline.from_pretrained(
+        "black-forest-labs/FLUX.1-schnell",
+        torch_dtype=torch.float16,
+        cache_dir=MODEL_CACHE,
+        token=HF_TOKEN,
+    )
+
+    # Also preload public models
+    preload_public_models()
 
 
 # Lazy-loaded pipeline instances
