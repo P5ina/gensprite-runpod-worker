@@ -7,51 +7,63 @@ from typing import Optional, Callable, Awaitable
 import numpy as np
 from PIL import Image
 import cv2
+import torch
+import torch.nn as nn
 
 from models.loader import get_texture_pipeline
 from utils.blob import upload_image
 
 
-def make_seamless(image: Image.Image) -> Image.Image:
+class SeamlessConv2d(nn.Module):
+    """Wrapper for Conv2d that uses circular padding for seamless textures."""
+
+    def __init__(self, conv: nn.Conv2d):
+        super().__init__()
+        self.conv = conv
+        self.padding = conv.padding
+
+    def forward(self, x):
+        # Apply circular padding manually
+        if self.padding[0] > 0 or self.padding[1] > 0:
+            # Circular pad: wrap around edges
+            x = torch.nn.functional.pad(
+                x,
+                (self.padding[1], self.padding[1], self.padding[0], self.padding[0]),
+                mode='circular'
+            )
+        # Run conv with no padding (we already padded)
+        return torch.nn.functional.conv2d(
+            x,
+            self.conv.weight,
+            self.conv.bias,
+            stride=self.conv.stride,
+            padding=0,
+            dilation=self.conv.dilation,
+            groups=self.conv.groups
+        )
+
+
+def patch_conv_for_seamless(model):
     """
-    Make an image seamlessly tileable by blending edges.
-    Uses cross-fading at borders.
+    Recursively patch all Conv2d layers in a model to use circular padding.
+    This makes the model generate seamlessly tileable textures.
     """
-    img_array = np.array(image).astype(np.float32)
-    h, w = img_array.shape[:2]
+    for name, module in model.named_children():
+        if isinstance(module, nn.Conv2d) and module.padding != (0, 0):
+            setattr(model, name, SeamlessConv2d(module))
+        else:
+            patch_conv_for_seamless(module)
 
-    # Blend width (percentage of image size)
-    blend_size = min(w, h) // 8
 
-    # Create horizontal blend
-    for i in range(blend_size):
-        alpha = i / blend_size
-        # Left edge blends with right
-        img_array[:, i] = (
-            img_array[:, i] * alpha +
-            img_array[:, w - blend_size + i] * (1 - alpha)
-        )
-        # Right edge blends with left
-        img_array[:, w - 1 - i] = (
-            img_array[:, w - 1 - i] * alpha +
-            img_array[:, blend_size - 1 - i] * (1 - alpha)
-        )
-
-    # Create vertical blend
-    for i in range(blend_size):
-        alpha = i / blend_size
-        # Top edge blends with bottom
-        img_array[i, :] = (
-            img_array[i, :] * alpha +
-            img_array[h - blend_size + i, :] * (1 - alpha)
-        )
-        # Bottom edge blends with top
-        img_array[h - 1 - i, :] = (
-            img_array[h - 1 - i, :] * alpha +
-            img_array[blend_size - 1 - i, :] * (1 - alpha)
-        )
-
-    return Image.fromarray(img_array.clip(0, 255).astype(np.uint8))
+def unpatch_conv_for_seamless(model):
+    """
+    Recursively restore original Conv2d layers from SeamlessConv2d wrappers.
+    """
+    for name, module in model.named_children():
+        if isinstance(module, SeamlessConv2d):
+            setattr(model, name, module.conv)
+        else:
+            unpatch_conv_for_seamless(module)
 
 
 def generate_normal_map(image: Image.Image, strength: float = 2.0) -> Image.Image:
@@ -193,11 +205,14 @@ async def generate_texture(
     if seed is None:
         seed = random.randint(0, 2**32 - 1)
 
-    import torch
     generator = torch.Generator(device=pipe.device).manual_seed(seed)
 
     if on_progress:
-        await on_progress(10, "Generating base texture...")
+        await on_progress(10, "Preparing seamless generation...")
+
+    # Patch UNet and VAE for seamless tiling (circular padding)
+    patch_conv_for_seamless(pipe.unet)
+    patch_conv_for_seamless(pipe.vae)
 
     # Enhance prompt for seamless texture generation
     enhanced_prompt = (
@@ -211,27 +226,29 @@ async def generate_texture(
         "objects, people, text, watermark, logo, border, frame"
     )
 
-    # Generate base color with SDXL
-    result = pipe(
-        prompt=enhanced_prompt,
-        negative_prompt=negative_prompt,
-        width=1024,
-        height=1024,
-        num_inference_steps=30,
-        guidance_scale=7.5,
-        generator=generator,
-    )
+    if on_progress:
+        await on_progress(15, "Generating seamless texture...")
 
-    base_image = result.images[0]
+    try:
+        # Generate base color with SDXL (seamless due to circular padding)
+        result = pipe(
+            prompt=enhanced_prompt,
+            negative_prompt=negative_prompt,
+            width=1024,
+            height=1024,
+            num_inference_steps=30,
+            guidance_scale=7.5,
+            generator=generator,
+        )
+
+        basecolor = result.images[0]
+    finally:
+        # Always restore original conv layers
+        unpatch_conv_for_seamless(pipe.unet)
+        unpatch_conv_for_seamless(pipe.vae)
 
     if on_progress:
-        await on_progress(50, "Making texture seamless...")
-
-    # Make seamless
-    basecolor = make_seamless(base_image)
-
-    if on_progress:
-        await on_progress(55, "Generating normal map...")
+        await on_progress(50, "Generating normal map...")
 
     # Generate PBR maps algorithmically
     normal = generate_normal_map(basecolor)
