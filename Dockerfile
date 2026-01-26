@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir --upgrade-strategy only-if-needed -r requirements
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 ENV HF_HOME=/runpod-volume/models
+ENV U2NET_HOME=/runpod-volume/models/u2net
 
 # Copy source code
 COPY src/ src/
