@@ -90,9 +90,7 @@ def get_sprite_pipeline():
             torch_dtype=torch.float16,
             cache_dir=MODEL_CACHE,
             token=HF_TOKEN,
-        )
-        # Use model CPU offload - moves components to GPU only when needed
-        _sprite_pipeline.enable_model_cpu_offload()
+        ).to("cuda")
     return _sprite_pipeline
 
 
@@ -106,9 +104,7 @@ def get_texture_pipeline():
             torch_dtype=torch.float16,
             variant="fp16",
             cache_dir=MODEL_CACHE,
-        )
-        # Use model CPU offload - moves components to GPU only when needed
-        _texture_pipeline.enable_model_cpu_offload()
+        ).to("cuda")
     return _texture_pipeline
 
 
