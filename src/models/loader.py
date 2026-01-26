@@ -44,10 +44,10 @@ def preload_public_models():
         cache_dir=MODEL_CACHE,
     )
 
-    # Rembg model (u2net)
+    # Rembg model (isnet-general-use for better edge detection)
     print("Loading rembg model...")
     from rembg import new_session
-    new_session("u2net")
+    new_session("isnet-general-use")
 
     print("Public models preloaded!")
     print("Note: Flux Schnell (gated) will download at runtime with HF_TOKEN")
@@ -117,7 +117,8 @@ def get_rembg_session():
     global _rembg_session
     if _rembg_session is None:
         from rembg import new_session
-        _rembg_session = new_session("u2net")
+        # isnet-general-use has better edge detection for game sprites
+        _rembg_session = new_session("isnet-general-use")
     return _rembg_session
 
 

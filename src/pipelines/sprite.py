@@ -88,15 +88,15 @@ async def generate_sprite(
     if on_progress:
         await on_progress(70, "Removing background...")
 
-    # Remove background using rembg
+    # Remove background using rembg with optimized settings for sprites
     rembg_session = get_rembg_session()
     processed_image = remove(
         raw_image,
         session=rembg_session,
         alpha_matting=True,
-        alpha_matting_foreground_threshold=240,
-        alpha_matting_background_threshold=10,
-        alpha_matting_erode_size=10,
+        alpha_matting_foreground_threshold=200,
+        alpha_matting_background_threshold=20,
+        alpha_matting_erode_size=5,
     )
 
     # Ensure RGBA mode
