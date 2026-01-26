@@ -152,11 +152,11 @@ async def process_job(job: dict) -> dict:
         return {"error": error_msg}
 
 
-def handler(job: dict) -> dict:
+async def handler(job: dict) -> dict:
     """
-    Synchronous handler wrapper for RunPod.
+    Async handler for RunPod.
     """
-    return asyncio.get_event_loop().run_until_complete(process_job(job))
+    return await process_job(job)
 
 
 if __name__ == "__main__":
