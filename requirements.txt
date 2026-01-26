@@ -1,0 +1,25 @@
+# RunPod
+runpod>=1.6.0
+
+# Diffusers and ML
+torch>=2.1.0
+diffusers>=0.25.0
+transformers>=4.36.0
+accelerate>=0.25.0
+safetensors>=0.4.0
+xformers>=0.0.23
+
+# Image processing
+Pillow>=10.0.0
+rembg>=2.0.50
+onnxruntime>=1.16.0
+numpy>=1.24.0
+scipy>=1.11.0
+opencv-python-headless>=4.8.0
+
+# HTTP / Uploads
+httpx>=0.25.0
+aiofiles>=23.2.0
+
+# Utils
+python-dotenv>=1.0.0
