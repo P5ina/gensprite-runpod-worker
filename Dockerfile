@@ -21,10 +21,11 @@ ENV HF_HOME=/app/models
 # Copy source code
 COPY src/ src/
 
-# Pre-download non-gated models during build
-RUN python -c "from src.models.loader import preload_public_models; preload_public_models()"
+# HuggingFace token for gated models (required for Flux)
+ARG HF_TOKEN
+ENV HF_TOKEN=${HF_TOKEN}
 
-# Note: Gated models (Flux) will be downloaded at runtime using HF_TOKEN env var
-# Set HF_TOKEN in RunPod endpoint environment variables
+# Pre-download ALL models during build (including Flux)
+RUN python -c "from src.models.loader import preload_models; preload_models()"
 
 CMD ["python", "-u", "src/handler.py"]
