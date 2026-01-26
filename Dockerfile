@@ -10,8 +10,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
+# Use only-if-needed to avoid reinstalling packages already in base image
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade-strategy only-if-needed -r requirements.txt
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
