@@ -13,15 +13,15 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download models during build for faster cold starts
-COPY src/models/loader.py src/models/loader.py
-RUN python -c "from src.models.loader import preload_models; preload_models()"
+# Set environment variables early for model downloads
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+ENV HF_HOME=/app/models
 
-# Copy source code
+# Copy source code first, then preload models
 COPY src/ src/
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV HF_HOME=/app/models
+# Pre-download models during build for faster cold starts
+RUN python -c "from src.models.loader import preload_models; preload_models()"
 
 CMD ["python", "-u", "src/handler.py"]
