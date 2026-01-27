@@ -108,21 +108,6 @@ def generate_normal_map(image: Image.Image, strength: float = 2.0) -> Image.Imag
     return Image.fromarray(np.stack([r, g, b], axis=-1))
 
 
-def generate_height_map(image: Image.Image) -> Image.Image:
-    """
-    Generate a height/displacement map from the base color.
-    Simply converts to grayscale with some contrast adjustment.
-    """
-    gray = image.convert("L")
-    gray_array = np.array(gray).astype(np.float32)
-
-    # Enhance contrast
-    gray_array = (gray_array - gray_array.min()) / (gray_array.max() - gray_array.min() + 1e-6)
-    gray_array = (gray_array * 255).astype(np.uint8)
-
-    return Image.fromarray(gray_array)
-
-
 def generate_roughness_map(image: Image.Image, base_roughness: float = 0.5) -> Image.Image:
     """
     Generate a roughness map from the base color.
@@ -189,7 +174,6 @@ async def generate_texture(
         {
             "basecolor_url": "https://...",
             "normal_url": "https://...",
-            "height_url": "https://...",
             "roughness_url": "https://...",
             "metallic_url": "https://...",
             "seed": 12345
@@ -254,12 +238,7 @@ async def generate_texture(
     normal = generate_normal_map(basecolor)
 
     if on_progress:
-        await on_progress(60, "Generating height map...")
-
-    height = generate_height_map(basecolor)
-
-    if on_progress:
-        await on_progress(65, "Generating roughness map...")
+        await on_progress(60, "Generating roughness map...")
 
     roughness = generate_roughness_map(basecolor)
 
@@ -288,16 +267,7 @@ async def generate_texture(
     )
 
     if on_progress:
-        await on_progress(85, "Uploading height map...")
-
-    height_url = await upload_image(
-        image=height,
-        path=f"textures/{job_id}/height.png",
-        token=blob_token,
-    )
-
-    if on_progress:
-        await on_progress(90, "Uploading roughness map...")
+        await on_progress(85, "Uploading roughness map...")
 
     roughness_url = await upload_image(
         image=roughness,
@@ -320,7 +290,6 @@ async def generate_texture(
     return {
         "basecolor_url": basecolor_url,
         "normal_url": normal_url,
-        "height_url": height_url,
         "roughness_url": roughness_url,
         "metallic_url": metallic_url,
         "seed": seed,
