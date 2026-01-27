@@ -149,13 +149,22 @@ class StableVideo3DDiffusionPipeline(StableVideoDiffusionPipeline):
         image_embeddings = self._encode_image(
             image, device, num_videos_per_prompt, self.do_classifier_free_guidance
         )
+        print(f"[SV3D DEBUG] image_embeddings: shape={image_embeddings.shape}, "
+              f"mean={image_embeddings.float().mean().item():.4f}, "
+              f"std={image_embeddings.float().std().item():.4f}, "
+              f"has_nan={image_embeddings.isnan().any().item()}, "
+              f"has_inf={image_embeddings.isinf().any().item()}")
 
         # 4. Encode input image using VAE
         image = self.video_processor.preprocess(image, height=height, width=width).to(device)
+        print(f"[SV3D DEBUG] preprocessed image tensor: shape={image.shape}, "
+              f"min={image.float().min().item():.4f}, max={image.float().max().item():.4f}, "
+              f"mean={image.float().mean().item():.4f}")
         noise = randn_tensor(image.shape, generator=generator, device=device, dtype=image.dtype)
         image = image + noise_aug_strength * noise
 
         needs_upcasting = self.vae.dtype == torch.float16 and self.vae.config.force_upcast
+        print(f"[SV3D DEBUG] VAE dtype={self.vae.dtype}, force_upcast={self.vae.config.force_upcast}, needs_upcasting={needs_upcasting}")
         if needs_upcasting:
             self.vae.to(dtype=torch.float32)
 
@@ -166,6 +175,10 @@ class StableVideo3DDiffusionPipeline(StableVideoDiffusionPipeline):
             do_classifier_free_guidance=self.do_classifier_free_guidance,
         )
         image_latents = image_latents.to(image_embeddings.dtype)
+        print(f"[SV3D DEBUG] image_latents: shape={image_latents.shape}, "
+              f"mean={image_latents.float().mean().item():.4f}, "
+              f"std={image_latents.float().std().item():.4f}, "
+              f"has_nan={image_latents.isnan().any().item()}")
 
         # cast back to fp16 if needed
         if needs_upcasting:
@@ -247,6 +260,13 @@ class StableVideo3DDiffusionPipeline(StableVideoDiffusionPipeline):
                     noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
                     noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_cond - noise_pred_uncond)
 
+                if i == 0:
+                    print(f"[SV3D DEBUG] step 0 noise_pred: "
+                          f"mean={noise_pred.float().mean().item():.4f}, "
+                          f"std={noise_pred.float().std().item():.4f}, "
+                          f"has_nan={noise_pred.isnan().any().item()}, "
+                          f"has_inf={noise_pred.isinf().any().item()}")
+
                 # compute the previous noisy sample x_t -> x_t-1
                 latents = self.scheduler.step(noise_pred, t, latents).prev_sample
 
@@ -261,11 +281,23 @@ class StableVideo3DDiffusionPipeline(StableVideoDiffusionPipeline):
                 if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
                     progress_bar.update()
 
+        print(f"[SV3D DEBUG] final latents: shape={latents.shape}, "
+              f"mean={latents.float().mean().item():.4f}, "
+              f"std={latents.float().std().item():.4f}, "
+              f"min={latents.float().min().item():.4f}, "
+              f"max={latents.float().max().item():.4f}, "
+              f"has_nan={latents.isnan().any().item()}, "
+              f"has_inf={latents.isinf().any().item()}")
+
         if not output_type == "latent":
             # cast back to fp16 if needed
             if needs_upcasting:
                 self.vae.to(dtype=torch.float16)
             frames = self.decode_latents(latents, num_frames, decode_chunk_size)
+            print(f"[SV3D DEBUG] decoded frames tensor: shape={frames.shape}, "
+                  f"mean={frames.mean().item():.4f}, "
+                  f"min={frames.min().item():.4f}, "
+                  f"max={frames.max().item():.4f}")
             frames = self.video_processor.postprocess_video(video=frames, output_type=output_type)
         else:
             frames = latents

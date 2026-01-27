@@ -175,6 +175,9 @@ async def generate_rotation(
 
     # Preprocess (576x576, white background, centered)
     processed_input = preprocess_image(input_image, size=576)
+    input_array = np.array(processed_input)
+    print(f"[ROTATION DEBUG] preprocessed input: size={processed_input.size}, mode={processed_input.mode}, "
+          f"mean={input_array.mean():.1f}, min={input_array.min()}, max={input_array.max()}")
 
     if on_progress:
         await on_progress(15, "Loading SV3D model...")
@@ -217,8 +220,11 @@ async def generate_rotation(
         sample_array = np.array(sample_frame)
     mean_val = sample_array.mean()
     print(f"Sample frame (index 0) mean pixel value: {mean_val:.1f}, shape: {sample_array.shape}")
-    if mean_val > 250:
-        print("WARNING: SV3D output appears blank/white — input image may have been empty")
+    if mean_val < 5 or mean_val > 250:
+        raise RuntimeError(
+            f"SV3D produced blank frames (mean pixel value: {mean_val:.1f}). "
+            "This may be caused by a bad input image or a GPU issue. Please try again."
+        )
 
     if on_progress:
         await on_progress(60, "Processing rotations...")
