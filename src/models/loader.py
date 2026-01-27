@@ -6,19 +6,13 @@ Downloads and caches models during Docker build.
 import os
 import torch
 
-# Baked-in models (SDXL, SVD, rembg) are in /app/models
+# Baked-in models (SDXL, SV3D, rembg) are in /app/models
 BAKED_MODEL_CACHE = "/app/models"
-
-# Gated models (Flux) download to network volume at runtime
-RUNTIME_MODEL_CACHE = os.environ.get("HF_RUNTIME_CACHE", "/runpod-volume/models")
 
 # Legacy - keep for compatibility
 MODEL_CACHE = BAKED_MODEL_CACHE
 
 # U2NET_HOME is set via Dockerfile to /app/models/u2net (baked into image)
-
-# HuggingFace token for gated models (Flux Schnell)
-HF_TOKEN = os.environ.get("HF_TOKEN")
 
 
 def get_device():
@@ -35,18 +29,27 @@ def get_dtype():
     return torch.float32
 
 
-def preload_public_models():
+def preload_models():
     """
-    Preload non-gated models during Docker build.
-    Gated models (Flux) will be downloaded at runtime with HF_TOKEN.
+    Preload models during Docker build.
     """
-    print("Preloading public models...")
+    print("Preloading models...")
 
-    # SDXL for texture generation (public model)
-    print("Loading SDXL...")
+    # SDXL base for sprite and texture generation
+    print("Loading SDXL base...")
     from diffusers import StableDiffusionXLPipeline
     StableDiffusionXLPipeline.from_pretrained(
         "stabilityai/stable-diffusion-xl-base-1.0",
+        torch_dtype=torch.float16,
+        variant="fp16",
+        cache_dir=MODEL_CACHE,
+    )
+
+    # SDXL refiner for sprite refinement
+    print("Loading SDXL refiner...")
+    from diffusers import StableDiffusionXLImg2ImgPipeline
+    StableDiffusionXLImg2ImgPipeline.from_pretrained(
+        "stabilityai/stable-diffusion-xl-refiner-1.0",
         torch_dtype=torch.float16,
         variant="fp16",
         cache_dir=MODEL_CACHE,
@@ -57,52 +60,47 @@ def preload_public_models():
     from rembg import new_session
     new_session("isnet-general-use")
 
-    print("Public models preloaded!")
-    print("Note: Flux Schnell (gated) will download at runtime with HF_TOKEN")
-
-
-def preload_models():
-    """
-    Preload all models including gated ones.
-    Requires HF_TOKEN environment variable.
-    """
-    print("Preloading all models...")
-
-    # Flux Schnell for sprite generation (gated model, requires HF_TOKEN)
-    print("Loading Flux Schnell...")
-    from diffusers import FluxPipeline
-    FluxPipeline.from_pretrained(
-        "black-forest-labs/FLUX.1-schnell",
-        torch_dtype=torch.float16,
-        cache_dir=MODEL_CACHE,
-        token=HF_TOKEN,
-    )
-
-    # Also preload public models
-    preload_public_models()
+    print("Models preloaded!")
 
 
 # Lazy-loaded pipeline instances
 _sprite_pipeline = None
+_sprite_refiner = None
 _texture_pipeline = None
 _rembg_session = None
 
 
 def get_sprite_pipeline():
-    """Get or create the Flux pipeline for sprite generation."""
+    """Get or create the SDXL base pipeline for sprite generation."""
     global _sprite_pipeline
     if _sprite_pipeline is None:
-        from diffusers import FluxPipeline
-        # Flux is gated, downloads to network volume at runtime
-        _sprite_pipeline = FluxPipeline.from_pretrained(
-            "black-forest-labs/FLUX.1-schnell",
+        from diffusers import StableDiffusionXLPipeline
+        # SDXL is baked into the image
+        _sprite_pipeline = StableDiffusionXLPipeline.from_pretrained(
+            "stabilityai/stable-diffusion-xl-base-1.0",
             torch_dtype=torch.float16,
-            cache_dir=RUNTIME_MODEL_CACHE,
-            token=HF_TOKEN,
+            variant="fp16",
+            cache_dir=BAKED_MODEL_CACHE,
             device_map=None,
             low_cpu_mem_usage=False,
         ).to("cuda")
     return _sprite_pipeline
+
+
+def get_sprite_refiner():
+    """Get or create the SDXL refiner pipeline for sprite generation."""
+    global _sprite_refiner
+    if _sprite_refiner is None:
+        from diffusers import StableDiffusionXLImg2ImgPipeline
+        _sprite_refiner = StableDiffusionXLImg2ImgPipeline.from_pretrained(
+            "stabilityai/stable-diffusion-xl-refiner-1.0",
+            torch_dtype=torch.float16,
+            variant="fp16",
+            cache_dir=BAKED_MODEL_CACHE,
+            device_map=None,
+            low_cpu_mem_usage=False,
+        ).to("cuda")
+    return _sprite_refiner
 
 
 def get_texture_pipeline():

@@ -1,5 +1,5 @@
 """
-Sprite generation pipeline using Flux Schnell + rembg.
+Sprite generation pipeline using SDXL + rembg.
 """
 
 import random
@@ -7,7 +7,7 @@ from typing import Optional, Callable, Awaitable
 from PIL import Image
 from rembg import remove
 
-from models.loader import get_sprite_pipeline, get_rembg_session
+from models.loader import get_sprite_pipeline, get_sprite_refiner, get_rembg_session
 from utils.blob import upload_image
 
 
@@ -43,8 +43,9 @@ async def generate_sprite(
     if on_progress:
         await on_progress(5, "Loading model...")
 
-    # Get the Flux pipeline
+    # Get the SDXL base and refiner pipelines
     pipe = get_sprite_pipeline()
+    refiner = get_sprite_refiner()
 
     # Set seed for reproducibility
     if seed is None:
@@ -62,14 +63,35 @@ async def generate_sprite(
         "simple clean background, digital art, high quality"
     )
 
-    # Generate image with Flux Schnell
-    # Flux Schnell uses 4 steps with no CFG (guidance_scale=0.0)
-    result = pipe(
+    negative_prompt = (
+        "blurry, low quality, distorted, deformed, ugly, "
+        "multiple objects, crowded, busy background"
+    )
+
+    # Generate base image with SDXL (run fewer steps, refiner will finish)
+    base_result = pipe(
         prompt=enhanced_prompt,
+        negative_prompt=negative_prompt,
         width=width,
         height=height,
-        num_inference_steps=4,
-        guidance_scale=0.0,
+        num_inference_steps=25,
+        denoising_end=0.8,
+        guidance_scale=7.5,
+        generator=generator,
+        output_type="latent",
+    )
+
+    if on_progress:
+        await on_progress(40, "Refining sprite...")
+
+    # Refine with SDXL refiner
+    result = refiner(
+        prompt=enhanced_prompt,
+        negative_prompt=negative_prompt,
+        image=base_result.images,
+        num_inference_steps=25,
+        denoising_start=0.8,
+        guidance_scale=7.5,
         generator=generator,
     )
 
