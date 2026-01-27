@@ -60,6 +60,7 @@ def preprocess_image(image: Image.Image, size: int = 576) -> Image.Image:
 
     if not np.any(rows) or not np.any(cols):
         # No content found, return white image
+        print("WARNING: preprocess_image found no visible content after background removal")
         return Image.new("RGB", (size, size), (255, 255, 255))
 
     y_min, y_max = np.where(rows)[0][[0, -1]]
@@ -206,6 +207,18 @@ async def generate_rotation(
     )
 
     frames = output.frames[0]  # List of PIL images
+    print(f"SV3D generated {len(frames)} frames, type: {type(frames[0])}")
+
+    # Validate that SV3D produced non-blank frames
+    sample_frame = frames[0]
+    if isinstance(sample_frame, np.ndarray):
+        sample_array = sample_frame
+    else:
+        sample_array = np.array(sample_frame)
+    mean_val = sample_array.mean()
+    print(f"Sample frame (index 0) mean pixel value: {mean_val:.1f}, shape: {sample_array.shape}")
+    if mean_val > 250:
+        print("WARNING: SV3D output appears blank/white — input image may have been empty")
 
     if on_progress:
         await on_progress(60, "Processing rotations...")
@@ -228,7 +241,7 @@ async def generate_rotation(
         if isinstance(frame, np.ndarray):
             frame = Image.fromarray(frame)
 
-        # Remove background
+        # Remove background with alpha matting
         transparent_frame = remove(
             frame,
             session=rembg_session,
@@ -239,6 +252,23 @@ async def generate_rotation(
 
         if transparent_frame.mode != "RGBA":
             transparent_frame = transparent_frame.convert("RGBA")
+
+        # Check if alpha matting was too aggressive (nearly empty result)
+        alpha = np.array(transparent_frame.split()[-1])
+        visible_pixels = np.sum(alpha > 10)
+        total_pixels = alpha.shape[0] * alpha.shape[1]
+
+        if visible_pixels < total_pixels * 0.01:
+            # Less than 1% visible — retry without alpha matting
+            print(f"Warning: {direction} frame nearly empty after alpha matting "
+                  f"({visible_pixels}/{total_pixels} visible), retrying without alpha matting")
+            transparent_frame = remove(
+                frame,
+                session=rembg_session,
+                alpha_matting=False,
+            )
+            if transparent_frame.mode != "RGBA":
+                transparent_frame = transparent_frame.convert("RGBA")
 
         # Upload
         url = await upload_image(
