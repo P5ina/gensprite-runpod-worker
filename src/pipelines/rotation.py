@@ -107,7 +107,7 @@ def get_sv3d_pipeline():
     if _sv3d_pipeline is not None:
         return _sv3d_pipeline
 
-    from diffusers import AutoencoderKLTemporalDecoder, EulerDiscreteScheduler
+    from diffusers import AutoencoderKL, EulerDiscreteScheduler
     from transformers import CLIPVisionModelWithProjection, CLIPImageProcessor
 
     # Import the custom SV3D components
@@ -130,7 +130,8 @@ def get_sv3d_pipeline():
     unet = SV3DUNetSpatioTemporalConditionModel.from_pretrained(
         model_path, subfolder="unet", torch_dtype=torch.float16, low_cpu_mem_usage=False
     ).to("cuda")
-    vae = AutoencoderKLTemporalDecoder.from_pretrained(
+    # Checkpoint VAE is AutoencoderKL (SD 1.5 image VAE), not the video temporal decoder
+    vae = AutoencoderKL.from_pretrained(
         model_path, subfolder="vae", torch_dtype=torch.float16, low_cpu_mem_usage=False
     ).to("cuda")
     scheduler = EulerDiscreteScheduler.from_pretrained(
