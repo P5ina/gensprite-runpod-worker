@@ -124,20 +124,20 @@ def get_sv3d_pipeline():
     else:
         model_path = "chenguolin/sv3d-diffusers"
 
-    # Load components
-    # low_cpu_mem_usage=False prevents meta tensor errors when moving to GPU
+    # Load components individually and move to CUDA before constructing pipeline
+    # to avoid meta tensor errors from pipeline.to()
     unet = SV3DUNetSpatioTemporalConditionModel.from_pretrained(
         model_path, subfolder="unet", torch_dtype=torch.float16, low_cpu_mem_usage=False
-    )
+    ).to("cuda")
     vae = AutoencoderKLTemporalDecoder.from_pretrained(
         model_path, subfolder="vae", torch_dtype=torch.float16, low_cpu_mem_usage=False
-    )
+    ).to("cuda")
     scheduler = EulerDiscreteScheduler.from_pretrained(
         model_path, subfolder="scheduler"
     )
     image_encoder = CLIPVisionModelWithProjection.from_pretrained(
         model_path, subfolder="image_encoder", torch_dtype=torch.float16, low_cpu_mem_usage=False
-    )
+    ).to("cuda")
     feature_extractor = CLIPImageProcessor.from_pretrained(
         model_path, subfolder="feature_extractor"
     )
@@ -148,7 +148,7 @@ def get_sv3d_pipeline():
         scheduler=scheduler,
         image_encoder=image_encoder,
         feature_extractor=feature_extractor,
-    ).to("cuda")
+    )
 
     return _sv3d_pipeline
 
