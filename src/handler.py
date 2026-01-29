@@ -3,8 +3,12 @@ Main RunPod handler for GenSprite worker.
 Routes jobs to appropriate pipelines and returns results.
 """
 
+import gc
 import os
+
 import runpod
+import torch
+from runpod.serverless.utils.rp_cleanup import clean
 
 # Import pipelines
 from pipelines.sprite import generate_sprite
@@ -14,6 +18,23 @@ from pipelines.rotation import generate_rotation
 
 # Environment variables
 BLOB_TOKEN = os.environ.get("BLOB_READ_WRITE_TOKEN", "")
+
+
+def cleanup():
+    """Clean up GPU memory and temporary files after each job."""
+    # Clear CUDA cache
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+
+    # Force garbage collection
+    gc.collect()
+
+    # Clean RunPod temporary directories
+    try:
+        clean()
+    except Exception:
+        pass
 
 
 async def handler(job: dict) -> dict:
@@ -91,12 +112,15 @@ async def handler(job: dict) -> dict:
                 on_progress=on_progress,
             )
         else:
+            cleanup()
             return {"status": "failed", "error": f"Unknown job type: {job_type}"}
 
+        cleanup()
         return result
     except Exception as e:
         error_msg = str(e)
         print(f"Job {job_id} failed: {error_msg}")
+        cleanup()
         return {"status": "failed", "error": error_msg}
 
 
