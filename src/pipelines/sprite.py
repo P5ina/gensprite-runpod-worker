@@ -18,6 +18,7 @@ async def generate_sprite(
     job_id: str,
     blob_token: str,
     seed: Optional[int] = None,
+    single_object: bool = True,
     on_progress: Optional[Callable[[int, str], Awaitable[None]]] = None,
 ) -> dict:
     """
@@ -57,16 +58,25 @@ async def generate_sprite(
     if on_progress:
         await on_progress(10, "Generating sprite...")
 
-    # Enhance prompt for better sprite generation
-    enhanced_prompt = (
-        f"{prompt}, game sprite, centered, isolated object, "
-        "simple clean background, digital art, high quality"
-    )
-
-    negative_prompt = (
-        "blurry, low quality, distorted, deformed, ugly, "
-        "multiple objects, crowded, busy background"
-    )
+    # Enhance prompt based on single/multiple object mode
+    if single_object:
+        enhanced_prompt = (
+            f"single {prompt}, one object only, game sprite, centered, "
+            "isolated on solid background, no other objects, digital art, high quality"
+        )
+        negative_prompt = (
+            "multiple objects, multiple characters, group, collection, crowd, "
+            "duplicates, pairs, several, many, busy background, "
+            "blurry, low quality, distorted, deformed, ugly"
+        )
+    else:
+        enhanced_prompt = (
+            f"{prompt}, game sprites, arranged composition, "
+            "solid background, digital art, high quality"
+        )
+        negative_prompt = (
+            "busy background, blurry, low quality, distorted, deformed, ugly"
+        )
 
     # Generate base image with SDXL (run fewer steps, refiner will finish)
     base_result = pipe(

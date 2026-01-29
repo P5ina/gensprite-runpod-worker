@@ -33,6 +33,7 @@ async def handler(job: dict) -> dict:
         "width": 1024,
         "height": 1024,
         "seed": 12345,  # optional
+        "single_object": True,  # optional, default True
 
         # For texture:
         "prompt": "brick wall texture",
@@ -68,6 +69,7 @@ async def handler(job: dict) -> dict:
                 width=job_input.get("width", 1024),
                 height=job_input.get("height", 1024),
                 seed=job_input.get("seed"),
+                single_object=job_input.get("single_object", True),
                 job_id=job_id,
                 blob_token=blob_token,
                 on_progress=on_progress,
