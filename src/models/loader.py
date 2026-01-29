@@ -55,10 +55,10 @@ def preload_models():
         cache_dir=MODEL_CACHE,
     )
 
-    # Rembg model (isnet-general-use for better edge detection)
+    # Rembg model (birefnet-general for better edge detection, MIT license)
     print("Loading rembg model...")
     from rembg import new_session
-    new_session("isnet-general-use")
+    new_session("birefnet-general")
 
     print("Models preloaded!")
 
@@ -125,8 +125,8 @@ def get_rembg_session():
     global _rembg_session
     if _rembg_session is None:
         from rembg import new_session
-        # isnet-general-use has better edge detection for game sprites
-        _rembg_session = new_session("isnet-general-use")
+        # birefnet-general has excellent edge detection (MIT license)
+        _rembg_session = new_session("birefnet-general")
     return _rembg_session
 
 

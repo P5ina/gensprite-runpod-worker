@@ -20,10 +20,8 @@ ENV PYTHONPATH=/app
 ENV HF_HOME=/app/models
 ENV U2NET_HOME=/app/models/u2net
 
-# Download rembg model during build
-RUN mkdir -p /app/models/u2net && \
-    curl -L -o /app/models/u2net/isnet-general-use.onnx \
-    https://github.com/danielgatis/rembg/releases/download/v0.0.0/isnet-general-use.onnx
+# Download BiRefNet model for background removal (MIT license)
+RUN python -c "from rembg import new_session; new_session('birefnet-general')"
 
 # Download ungated diffusers models during build
 # SDXL for texture generation (~6.5GB)
