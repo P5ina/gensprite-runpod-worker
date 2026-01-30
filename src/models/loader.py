@@ -68,6 +68,8 @@ _sprite_pipeline = None
 _sprite_refiner = None
 _texture_pipeline = None
 _rembg_session = None
+_tile_refiner_pipeline = None
+_realesrgan_upscaler = None
 
 
 def get_sprite_pipeline():
@@ -128,6 +130,65 @@ def get_rembg_session():
         # birefnet-general has excellent edge detection (MIT license)
         _rembg_session = new_session("birefnet-general")
     return _rembg_session
+
+
+def get_tile_refiner_pipeline():
+    """Get or create the SDXL + ControlNet Tile pipeline for refinement."""
+    global _tile_refiner_pipeline
+    if _tile_refiner_pipeline is None:
+        from diffusers import ControlNetModel, StableDiffusionXLControlNetImg2ImgPipeline
+
+        # Load ControlNet Tile model
+        controlnet = ControlNetModel.from_pretrained(
+            "TTPlanet/TTPLanet_SDXL_Controlnet_Tile_Realistic",
+            torch_dtype=torch.float16,
+            cache_dir=BAKED_MODEL_CACHE,
+        )
+
+        # Create img2img pipeline with SDXL base + ControlNet for refinement
+        _tile_refiner_pipeline = StableDiffusionXLControlNetImg2ImgPipeline.from_pretrained(
+            "stabilityai/stable-diffusion-xl-base-1.0",
+            controlnet=controlnet,
+            torch_dtype=torch.float16,
+            variant="fp16",
+            cache_dir=BAKED_MODEL_CACHE,
+            device_map=None,
+            low_cpu_mem_usage=False,
+        ).to("cuda")
+
+    return _tile_refiner_pipeline
+
+
+def get_realesrgan_upscaler():
+    """Get or create the RealESRGAN upscaler."""
+    global _realesrgan_upscaler
+    if _realesrgan_upscaler is None:
+        from basicsr.archs.rrdbnet_arch import RRDBNet
+        from realesrgan import RealESRGANer
+
+        model = RRDBNet(
+            num_in_ch=3,
+            num_out_ch=3,
+            num_feat=64,
+            num_block=23,
+            num_grow_ch=32,
+            scale=4,
+        )
+
+        model_path = os.path.join(BAKED_MODEL_CACHE, "realesrgan", "RealESRGAN_x4plus.pth")
+
+        _realesrgan_upscaler = RealESRGANer(
+            scale=4,
+            model_path=model_path,
+            model=model,
+            tile=0,  # No tiling for small images
+            tile_pad=10,
+            pre_pad=0,
+            half=True,  # Use fp16 for speed
+            device="cuda",
+        )
+
+    return _realesrgan_upscaler
 
 
 if __name__ == "__main__":

@@ -6,6 +6,8 @@ diffusers>=0.25.0
 transformers>=4.36.0
 accelerate>=0.25.0
 safetensors>=0.4.0
+realesrgan>=0.3.0
+basicsr>=1.4.2
 
 # Image processing
 Pillow>=10.0.0

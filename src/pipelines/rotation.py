@@ -11,7 +11,12 @@ import numpy as np
 import torch
 from rembg import remove
 
-from models.loader import get_rembg_session, BAKED_MODEL_CACHE
+from models.loader import (
+    get_rembg_session,
+    get_tile_refiner_pipeline,
+    get_realesrgan_upscaler,
+    BAKED_MODEL_CACHE,
+)
 from utils.blob import upload_image, download_image
 
 
@@ -95,6 +100,51 @@ def preprocess_image(image: Image.Image, size: int = 576) -> Image.Image:
     result = result.resize((size, size), Image.Resampling.LANCZOS)
 
     return result
+
+
+def refine_frame(frame: Image.Image, prompt: str = "game sprite, high quality, detailed") -> Image.Image:
+    """
+    Refine a single frame using RealESRGAN upscale + ControlNet Tile.
+
+    1. Upscale 4x with RealESRGAN (576 -> 2304)
+    2. Refine with ControlNet Tile at low denoise to add detail
+    3. Output at 1024x1024
+    """
+    import cv2
+
+    # Convert PIL to numpy BGR for RealESRGAN
+    frame_rgb = frame.convert("RGB")
+    frame_np = np.array(frame_rgb)
+    frame_bgr = cv2.cvtColor(frame_np, cv2.COLOR_RGB2BGR)
+
+    # Step 1: Upscale with RealESRGAN
+    upscaler = get_realesrgan_upscaler()
+    upscaled_bgr, _ = upscaler.enhance(frame_bgr, outscale=4)
+    upscaled_rgb = cv2.cvtColor(upscaled_bgr, cv2.COLOR_BGR2RGB)
+    upscaled = Image.fromarray(upscaled_rgb)
+
+    # Step 2: Refine with ControlNet Tile
+    pipe = get_tile_refiner_pipeline()
+
+    # Resize to 1024 for ControlNet (2304 is too large for VRAM)
+    resized = upscaled.resize((1024, 1024), Image.Resampling.LANCZOS)
+
+    generator = torch.Generator(device="cuda").manual_seed(42)
+
+    # img2img with ControlNet: image is the input, control_image is the conditioning
+    refined = pipe(
+        prompt=prompt,
+        negative_prompt="blurry, low quality, distorted, artifacts, noise",
+        image=resized,
+        control_image=resized,
+        controlnet_conditioning_scale=0.9,
+        num_inference_steps=20,
+        guidance_scale=7.0,
+        strength=0.3,  # Low denoise to preserve structure while adding detail
+        generator=generator,
+    ).images[0]
+
+    return refined
 
 
 # Lazy-loaded pipeline
@@ -228,7 +278,7 @@ async def generate_rotation(
         )
 
     if on_progress:
-        await on_progress(60, "Processing rotations...")
+        await on_progress(50, "Refining frames...")
 
     # Get rembg session
     rembg_session = get_rembg_session()
@@ -239,8 +289,8 @@ async def generate_rotation(
 
     for i, direction in enumerate(direction_names):
         if on_progress:
-            progress = 60 + int((i / len(direction_names)) * 35)
-            await on_progress(progress, f"Processing {direction} direction...")
+            progress = 50 + int((i / len(direction_names)) * 45)
+            await on_progress(progress, f"Refining {direction} direction...")
 
         frame_index = DIRECTION_INDICES[direction]
         frame = frames[frame_index]
@@ -248,9 +298,12 @@ async def generate_rotation(
         if isinstance(frame, np.ndarray):
             frame = Image.fromarray(frame)
 
+        # Refine frame with RealESRGAN + ControlNet Tile
+        refined_frame = refine_frame(frame, prompt="game sprite, high quality, detailed, sharp")
+
         # Remove background with alpha matting
         transparent_frame = remove(
-            frame,
+            refined_frame,
             session=rembg_session,
             alpha_matting=True,
             alpha_matting_foreground_threshold=240,
@@ -270,7 +323,7 @@ async def generate_rotation(
             print(f"Warning: {direction} frame nearly empty after alpha matting "
                   f"({visible_pixels}/{total_pixels} visible), retrying without alpha matting")
             transparent_frame = remove(
-                frame,
+                refined_frame,
                 session=rembg_session,
                 alpha_matting=False,
             )
