@@ -102,27 +102,29 @@ def preprocess_image(image: Image.Image, size: int = 576) -> Image.Image:
     return result
 
 
-def refine_frame(frame: Image.Image, use_controlnet: bool = False) -> Image.Image:
+def refine_frame(frame: Image.Image) -> Image.Image:
     """
     Refine a single frame using RealESRGAN upscale.
 
     1. Upscale 4x with RealESRGAN (576 -> 2304)
     2. Resize to 1024x1024 for final output
     """
-    # Convert PIL to tensor for spandrel
+    # Convert PIL to tensor for spandrel (needs RGB, float32, BCHW format)
     frame_rgb = frame.convert("RGB")
     frame_np = np.array(frame_rgb).astype(np.float32) / 255.0
-    frame_tensor = torch.from_numpy(frame_np).permute(2, 0, 1).unsqueeze(0).to("cuda")
+    frame_tensor = torch.from_numpy(frame_np).permute(2, 0, 1).unsqueeze(0).to("cuda").half()
 
-    # Upscale with RealESRGAN (spandrel)
+    # Upscale with RealESRGAN (spandrel ModelDescriptor is callable)
     upscaler = get_realesrgan_upscaler()
     with torch.no_grad():
         upscaled_tensor = upscaler(frame_tensor)
 
     # Convert back to PIL
-    upscaled_np = upscaled_tensor.squeeze(0).permute(1, 2, 0).cpu().numpy()
+    upscaled_np = upscaled_tensor.squeeze(0).permute(1, 2, 0).float().cpu().numpy()
     upscaled_np = (upscaled_np.clip(0, 1) * 255).astype(np.uint8)
     upscaled = Image.fromarray(upscaled_np)
+
+    print(f"Upscaled from {frame.size} to {upscaled.size}")
 
     # Resize to 1024 for final output
     result = upscaled.resize((1024, 1024), Image.Resampling.LANCZOS)

@@ -168,8 +168,9 @@ def get_realesrgan_upscaler():
         model_path = os.path.join(BAKED_MODEL_CACHE, "realesrgan", "RealESRGAN_x4plus.pth")
 
         # Spandrel auto-detects model architecture from weights
-        _realesrgan_upscaler = spandrel.ModelLoader().load_from_file(model_path)
-        _realesrgan_upscaler = _realesrgan_upscaler.to("cuda").eval()
+        model_descriptor = spandrel.ModelLoader().load_from_file(model_path)
+        _realesrgan_upscaler = model_descriptor.cuda().eval()
+        print(f"Loaded RealESRGAN: scale={model_descriptor.scale}, arch={model_descriptor.architecture}")
 
     return _realesrgan_upscaler
 
