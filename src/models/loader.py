@@ -160,33 +160,16 @@ def get_tile_refiner_pipeline():
 
 
 def get_realesrgan_upscaler():
-    """Get or create the RealESRGAN upscaler."""
+    """Get or create the RealESRGAN upscaler using spandrel."""
     global _realesrgan_upscaler
     if _realesrgan_upscaler is None:
-        from basicsr.archs.rrdbnet_arch import RRDBNet
-        from realesrgan import RealESRGANer
-
-        model = RRDBNet(
-            num_in_ch=3,
-            num_out_ch=3,
-            num_feat=64,
-            num_block=23,
-            num_grow_ch=32,
-            scale=4,
-        )
+        import spandrel
 
         model_path = os.path.join(BAKED_MODEL_CACHE, "realesrgan", "RealESRGAN_x4plus.pth")
 
-        _realesrgan_upscaler = RealESRGANer(
-            scale=4,
-            model_path=model_path,
-            model=model,
-            tile=0,  # No tiling for small images
-            tile_pad=10,
-            pre_pad=0,
-            half=True,  # Use fp16 for speed
-            device="cuda",
-        )
+        # Spandrel auto-detects model architecture from weights
+        _realesrgan_upscaler = spandrel.ModelLoader().load_from_file(model_path)
+        _realesrgan_upscaler = _realesrgan_upscaler.to("cuda").eval()
 
     return _realesrgan_upscaler
 

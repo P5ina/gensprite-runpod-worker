@@ -48,16 +48,10 @@ RUN python -c "from diffusers import ControlNetModel; \
         cache_dir='/app/models' \
     )"
 
-# RealESRGAN model for upscaling
-RUN python -c "from basicsr.archs.rrdbnet_arch import RRDBNet; \
-    from realesrgan import RealESRGANer; \
-    import urllib.request; \
-    import os; \
-    os.makedirs('/app/models/realesrgan', exist_ok=True); \
-    urllib.request.urlretrieve( \
-        'https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth', \
-        '/app/models/realesrgan/RealESRGAN_x4plus.pth' \
-    )"
+# RealESRGAN model for upscaling (download weights only)
+RUN mkdir -p /app/models/realesrgan && \
+    wget -O /app/models/realesrgan/RealESRGAN_x4plus.pth \
+    https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth
 
 # Copy source code
 COPY src/ src/

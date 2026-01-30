@@ -110,18 +110,20 @@ def refine_frame(frame: Image.Image, prompt: str = "game sprite, high quality, d
     2. Refine with ControlNet Tile at low denoise to add detail
     3. Output at 1024x1024
     """
-    import cv2
-
-    # Convert PIL to numpy BGR for RealESRGAN
+    # Convert PIL to tensor for spandrel
     frame_rgb = frame.convert("RGB")
-    frame_np = np.array(frame_rgb)
-    frame_bgr = cv2.cvtColor(frame_np, cv2.COLOR_RGB2BGR)
+    frame_np = np.array(frame_rgb).astype(np.float32) / 255.0
+    frame_tensor = torch.from_numpy(frame_np).permute(2, 0, 1).unsqueeze(0).to("cuda")
 
-    # Step 1: Upscale with RealESRGAN
+    # Step 1: Upscale with RealESRGAN (spandrel)
     upscaler = get_realesrgan_upscaler()
-    upscaled_bgr, _ = upscaler.enhance(frame_bgr, outscale=4)
-    upscaled_rgb = cv2.cvtColor(upscaled_bgr, cv2.COLOR_BGR2RGB)
-    upscaled = Image.fromarray(upscaled_rgb)
+    with torch.no_grad():
+        upscaled_tensor = upscaler(frame_tensor)
+
+    # Convert back to PIL
+    upscaled_np = upscaled_tensor.squeeze(0).permute(1, 2, 0).cpu().numpy()
+    upscaled_np = (upscaled_np.clip(0, 1) * 255).astype(np.uint8)
+    upscaled = Image.fromarray(upscaled_np)
 
     # Step 2: Refine with ControlNet Tile
     pipe = get_tile_refiner_pipeline()
