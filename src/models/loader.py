@@ -138,9 +138,9 @@ def get_tile_refiner_pipeline():
     if _tile_refiner_pipeline is None:
         from diffusers import ControlNetModel, StableDiffusionXLControlNetImg2ImgPipeline
 
-        # Load ControlNet Tile model
+        # Load ControlNet Tile model (xinsir version is in proper diffusers format)
         controlnet = ControlNetModel.from_pretrained(
-            "TTPlanet/TTPLanet_SDXL_Controlnet_Tile_Realistic",
+            "xinsir/controlnet-tile-sdxl-1.0",
             torch_dtype=torch.float16,
             cache_dir=BAKED_MODEL_CACHE,
         )

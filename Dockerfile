@@ -43,7 +43,7 @@ RUN python -c "from huggingface_hub import snapshot_download; \
 # ControlNet Tile for rotation refinement (~2.5GB)
 RUN python -c "from diffusers import ControlNetModel; \
     ControlNetModel.from_pretrained( \
-        'TTPlanet/TTPLanet_SDXL_Controlnet_Tile_Realistic', \
+        'xinsir/controlnet-tile-sdxl-1.0', \
         torch_dtype='auto', \
         cache_dir='/app/models' \
     )"
