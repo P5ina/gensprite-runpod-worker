@@ -105,16 +105,30 @@ def preprocess_image(image: Image.Image, size: int = 576) -> Image.Image:
 def refine_frame(frame: Image.Image) -> Image.Image:
     """
     Refine a single frame using RealESRGAN upscale.
+    Handles transparent images by preserving alpha channel.
 
-    1. Upscale 4x with RealESRGAN (576 -> 2304)
-    2. Resize to 1024x1024 for final output
+    1. Separate RGB and alpha
+    2. Upscale RGB with RealESRGAN (576 -> 2304)
+    3. Upscale alpha with Lanczos
+    4. Recombine and resize to 1024x1024
     """
-    # Convert PIL to tensor for spandrel (needs RGB, float32, BCHW format)
-    frame_rgb = frame.convert("RGB")
-    frame_np = np.array(frame_rgb).astype(np.float32) / 255.0
+    has_alpha = frame.mode == "RGBA"
+
+    # Extract alpha channel if present
+    if has_alpha:
+        alpha = frame.split()[3]
+        # Composite RGB over white background for better upscaling
+        rgb = Image.new("RGB", frame.size, (255, 255, 255))
+        rgb.paste(frame, mask=alpha)
+    else:
+        rgb = frame.convert("RGB")
+        alpha = None
+
+    # Convert RGB to tensor for spandrel
+    frame_np = np.array(rgb).astype(np.float32) / 255.0
     frame_tensor = torch.from_numpy(frame_np).permute(2, 0, 1).unsqueeze(0).to("cuda").half()
 
-    # Upscale with RealESRGAN (spandrel ModelDescriptor is callable)
+    # Upscale RGB with RealESRGAN
     upscaler = get_realesrgan_upscaler()
     with torch.no_grad():
         upscaled_tensor = upscaler(frame_tensor)
@@ -122,14 +136,24 @@ def refine_frame(frame: Image.Image) -> Image.Image:
     # Convert back to PIL
     upscaled_np = upscaled_tensor.squeeze(0).permute(1, 2, 0).float().cpu().numpy()
     upscaled_np = (upscaled_np.clip(0, 1) * 255).astype(np.uint8)
-    upscaled = Image.fromarray(upscaled_np)
+    upscaled_rgb = Image.fromarray(upscaled_np)
 
-    print(f"Upscaled from {frame.size} to {upscaled.size}")
+    print(f"Upscaled from {frame.size} to {upscaled_rgb.size}")
 
     # Resize to 1024 for final output
-    result = upscaled.resize((1024, 1024), Image.Resampling.LANCZOS)
+    final_rgb = upscaled_rgb.resize((1024, 1024), Image.Resampling.LANCZOS)
 
-    return result
+    # Handle alpha channel
+    if has_alpha and alpha is not None:
+        # Upscale alpha to match (use same scale as RGB)
+        upscale_factor = upscaled_rgb.size[0] / frame.size[0]
+        alpha_upscaled = alpha.resize(upscaled_rgb.size, Image.Resampling.LANCZOS)
+        final_alpha = alpha_upscaled.resize((1024, 1024), Image.Resampling.LANCZOS)
+
+        # Recombine
+        final_rgb.putalpha(final_alpha)
+
+    return final_rgb
 
 
 # Lazy-loaded pipeline
