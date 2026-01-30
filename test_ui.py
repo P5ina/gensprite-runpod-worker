@@ -15,14 +15,14 @@ import numpy as np
 
 
 def test_refine_only(image):
-    """Test just the refinement step."""
+    """Test just the refinement step (RealESRGAN upscale)."""
     from pipelines.rotation import refine_frame
 
     if image is None:
         return None
 
     img = Image.fromarray(image)
-    refined = refine_frame(img, prompt="game sprite, high quality, detailed, sharp")
+    refined = refine_frame(img)
     return refined
 
 
@@ -79,8 +79,8 @@ def test_full_rotation(image, elevation):
         if isinstance(frame, np.ndarray):
             frame = Image.fromarray(frame)
 
-        # Refine
-        refined = refine_frame(frame, prompt="game sprite, high quality, detailed, sharp")
+        # Refine (RealESRGAN upscale)
+        refined = refine_frame(frame)
 
         # Remove background
         transparent = remove(

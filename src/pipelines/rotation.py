@@ -102,20 +102,19 @@ def preprocess_image(image: Image.Image, size: int = 576) -> Image.Image:
     return result
 
 
-def refine_frame(frame: Image.Image, prompt: str = "game sprite, high quality, detailed") -> Image.Image:
+def refine_frame(frame: Image.Image, use_controlnet: bool = False) -> Image.Image:
     """
-    Refine a single frame using RealESRGAN upscale + ControlNet Tile.
+    Refine a single frame using RealESRGAN upscale.
 
     1. Upscale 4x with RealESRGAN (576 -> 2304)
-    2. Refine with ControlNet Tile at low denoise to add detail
-    3. Output at 1024x1024
+    2. Resize to 1024x1024 for final output
     """
     # Convert PIL to tensor for spandrel
     frame_rgb = frame.convert("RGB")
     frame_np = np.array(frame_rgb).astype(np.float32) / 255.0
     frame_tensor = torch.from_numpy(frame_np).permute(2, 0, 1).unsqueeze(0).to("cuda")
 
-    # Step 1: Upscale with RealESRGAN (spandrel)
+    # Upscale with RealESRGAN (spandrel)
     upscaler = get_realesrgan_upscaler()
     with torch.no_grad():
         upscaled_tensor = upscaler(frame_tensor)
@@ -125,28 +124,10 @@ def refine_frame(frame: Image.Image, prompt: str = "game sprite, high quality, d
     upscaled_np = (upscaled_np.clip(0, 1) * 255).astype(np.uint8)
     upscaled = Image.fromarray(upscaled_np)
 
-    # Step 2: Refine with ControlNet Tile
-    pipe = get_tile_refiner_pipeline()
+    # Resize to 1024 for final output
+    result = upscaled.resize((1024, 1024), Image.Resampling.LANCZOS)
 
-    # Resize to 1024 for ControlNet (2304 is too large for VRAM)
-    resized = upscaled.resize((1024, 1024), Image.Resampling.LANCZOS)
-
-    generator = torch.Generator(device="cuda").manual_seed(42)
-
-    # img2img with ControlNet: image is the input, control_image is the conditioning
-    refined = pipe(
-        prompt=prompt,
-        negative_prompt="blurry, low quality, distorted, artifacts, noise",
-        image=resized,
-        control_image=resized,
-        controlnet_conditioning_scale=0.9,
-        num_inference_steps=20,
-        guidance_scale=7.0,
-        strength=0.3,  # Low denoise to preserve structure while adding detail
-        generator=generator,
-    ).images[0]
-
-    return refined
+    return result
 
 
 # Lazy-loaded pipeline
@@ -300,8 +281,8 @@ async def generate_rotation(
         if isinstance(frame, np.ndarray):
             frame = Image.fromarray(frame)
 
-        # Refine frame with RealESRGAN + ControlNet Tile
-        refined_frame = refine_frame(frame, prompt="game sprite, high quality, detailed, sharp")
+        # Refine frame with RealESRGAN upscale
+        refined_frame = refine_frame(frame)
 
         # Remove background with alpha matting
         transparent_frame = remove(
